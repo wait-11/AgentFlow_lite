@@ -145,6 +145,13 @@ IMPORTANT: The response must end with either "Conclusion: STOP" or "Conclusion: 
         return stop_verification
 
     def extract_conclusion(self, response: Any) -> Tuple[str, str]:
+        if isinstance(response, dict):
+            if "error" in response or "message" in response:
+                error_type = response.get("error", "VerifierError")
+                message = response.get("message", response)
+                raise RuntimeError(f"Verifier LLM returned {error_type}: {message}")
+            response = json.dumps(response, ensure_ascii=False)
+
         if isinstance(response, str):
             # Attempt to parse the response as JSON
             try:

@@ -148,7 +148,7 @@ class Initializer:
 
                 try:
                     # Read the tool.py file and extract TOOL_NAME
-                    with open(tool_file_path, 'r') as f:
+                    with open(tool_file_path, 'r', encoding='utf-8') as f:
                         content = f.read()
 
                     # Extract TOOL_NAME using simple string parsing
