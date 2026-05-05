@@ -10,21 +10,42 @@
 
 ## 1. 安装
 
+### macOS / Linux
+
 ```bash
 # 安装 uv 包管理器
-pip install uv
+python3 -m pip install uv
 
 # 创建虚拟环境
 uv venv -p 3.11
 
 # 安装依赖（跳过 vllm，推理不需要）
-uv pip install -r agentflow/requirements_inference.txt --python .venv/Scripts/python.exe
+uv pip install -r agentflow/requirements_inference.txt --python .venv/bin/python
 
 # 安装项目级依赖
-uv pip install aiohttp flask fastapi uvicorn psutil setproctitle graphviz agentops dashscope fire --python .venv/Scripts/python.exe
+uv pip install aiohttp flask fastapi uvicorn psutil setproctitle graphviz agentops dashscope fire --python .venv/bin/python
 
 # 安装 agentflow 项目本身（dev 模式）
-uv pip install -e . --python .venv/Scripts/python.exe
+uv pip install -e . --python .venv/bin/python
+```
+
+### Windows PowerShell
+
+```powershell
+# 安装 uv 包管理器
+python -m pip install uv
+
+# 创建虚拟环境
+uv venv -p 3.11
+
+# 安装依赖（跳过 vllm，推理不需要）
+uv pip install -r agentflow/requirements_inference.txt --python .venv\Scripts\python.exe
+
+# 安装项目级依赖
+uv pip install aiohttp flask fastapi uvicorn psutil setproctitle graphviz agentops dashscope fire --python .venv\Scripts\python.exe
+
+# 安装 agentflow 项目本身（dev 模式）
+uv pip install -e . --python .venv\Scripts\python.exe
 ```
 
 > **注意**：如果 `requirements_inference.txt` 不存在，手动从 `agentflow/requirements.txt` 中移除 `vllm==0.8.5` 一行后使用。
@@ -44,15 +65,26 @@ cp agentflow/.env.template agentflow/.env
 
 ### 方式一：快速演示
 
+macOS / Linux:
+
 ```bash
-PYTHONIOENCODING=utf-8 .venv/Scripts/python quick_start.py
+PYTHONIOENCODING=utf-8 .venv/bin/python quick_start.py
+```
+
+Windows PowerShell:
+
+```powershell
+$env:PYTHONIOENCODING = "utf-8"
+.\.venv\Scripts\python.exe quick_start.py
 ```
 
 ### 方式二：跑单道 Benchmark 题
 
+macOS / Linux:
+
 ```bash
 cd test
-PYTHONIOENCODING=utf-8 ../.venv/Scripts/python solve.py \
+PYTHONIOENCODING=utf-8 ../.venv/bin/python solve.py \
   --index 0 \
   --task bamboogle \
   --data_file bamboogle/data/data.json \
@@ -62,6 +94,24 @@ PYTHONIOENCODING=utf-8 ../.venv/Scripts/python solve.py \
   --model_engine "trainable,dashscope,dashscope,dashscope" \
   --max_steps 10 \
   --max_time 300 \
+  --temperature 0.0
+```
+
+Windows PowerShell:
+
+```powershell
+cd test
+$env:PYTHONIOENCODING = "utf-8"
+..\.venv\Scripts\python.exe solve.py `
+  --index 0 `
+  --task bamboogle `
+  --data_file bamboogle/data/data.json `
+  --llm_engine_name dashscope `
+  --enabled_tools "Base_Generator_Tool,Wikipedia_Search_Tool" `
+  --tool_engine "dashscope,dashscope" `
+  --model_engine "trainable,dashscope,dashscope,dashscope" `
+  --max_steps 10 `
+  --max_time 300 `
   --temperature 0.0
 ```
 
@@ -92,11 +142,12 @@ test/gameof24/     - 24点游戏
 test/amc23/        - 数学竞赛
 ```
 
-## 4. Windows 注意事项
+## 4. 平台注意事项
 
-- 所有命令前加 `PYTHONIOENCODING=utf-8`，否则 emoji 会导致 GBK 编码报错
+- Windows 建议设置 `PYTHONIOENCODING=utf-8`，否则 emoji 可能导致 GBK 编码报错
 - vllm 无法在 Windows 上安装（仅支持 Linux/macOS），推理不需要它
-- 虚拟环境激活路径：`.venv\Scripts\activate`（非 `.venv/bin/activate`）
+- Windows 虚拟环境激活路径：`.venv\Scripts\activate`
+- macOS / Linux 虚拟环境激活路径：`.venv/bin/activate`
 
 ## 5. 推理流程架构
 

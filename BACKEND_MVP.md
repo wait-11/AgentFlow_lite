@@ -14,6 +14,12 @@
 启动成功后打开：
 
 ```text
+http://127.0.0.1:8010/
+```
+
+后端也保留 Swagger 文档：
+
+```text
 http://127.0.0.1:8010/docs
 ```
 
@@ -59,6 +65,18 @@ $env:ALL_PROXY = ""
 | `GET` | `/api/runs` | 获取当前内存中的任务列表 |
 | `GET` | `/api/runs/{run_id}` | 获取指定任务状态、事件和结果 |
 | `GET` | `/api/runs/{run_id}/events` | 通过 SSE 流式查看任务事件 |
+
+## 前端工作台
+
+项目根目录新增了零构建静态页面：
+
+```text
+frontend/index.html
+frontend/styles.css
+frontend/app.js
+```
+
+启动后端后访问 `http://127.0.0.1:8010/`，可以在页面里选择模型、工具、推理参数，提交任务，并查看 SSE 事件流、最终答案和最近任务。
 
 ## 创建任务示例
 

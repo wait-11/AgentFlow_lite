@@ -1,15 +1,21 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import List
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 from .run_manager import RunManager
 from .schemas import ModelPreset, RunCreatedResponse, RunRecord, RunRequest, ToolInfo
 
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+FRONTEND_DIR = PROJECT_ROOT / "frontend"
+ASSETS_DIR = PROJECT_ROOT / "assets"
 
 TOOLS = [
     ToolInfo(
@@ -113,6 +119,12 @@ def create_app() -> FastAPI:
                 yield f"event: error\ndata: {json.dumps(error_payload, ensure_ascii=False)}\n\n"
 
         return StreamingResponse(event_source(), media_type="text/event-stream")
+
+    if ASSETS_DIR.exists():
+        app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)), name="assets")
+
+    if FRONTEND_DIR.exists():
+        app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
 
     return app
 

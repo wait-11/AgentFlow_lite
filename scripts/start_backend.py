@@ -50,6 +50,7 @@ def main() -> None:
 
     print("Starting AgentFlow Lite backend MVP")
     print(f"Project root: {PROJECT_ROOT}")
+    print(f"Workbench: http://{args.host}:{args.port}/")
     print(f"API docs: http://{args.host}:{args.port}/docs")
     print(f"Health:   http://{args.host}:{args.port}/api/health")
 
