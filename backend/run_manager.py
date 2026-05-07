@@ -39,6 +39,21 @@ def _make_json_safe(value: Any) -> Any:
         return str(value)
 
 
+SOLVER_EVENT_MESSAGES = {
+    "query_received": "Query received by solver.",
+    "base_response": "Base response generated.",
+    "query_analysis": "Query analysis generated.",
+    "planner_action": "Planner selected the next action.",
+    "tool_unavailable": "Planner selected an unavailable tool.",
+    "executor_command": "Executor generated a tool command.",
+    "tool_result": "Tool command executed.",
+    "memory_update": "Memory updated.",
+    "verifier_result": "Verifier evaluated the current memory.",
+    "final_output": "Detailed final output generated.",
+    "direct_output": "Direct final answer generated.",
+}
+
+
 class RunManager:
     def __init__(self, max_workers: int = 2):
         self._runs: Dict[str, RunRecord] = {}
@@ -126,6 +141,10 @@ class RunManager:
                 },
             )
 
+            def on_solver_event(event_type: str, data: Dict[str, Any]) -> None:
+                message = SOLVER_EVENT_MESSAGES.get(event_type, f"Solver event: {event_type}.")
+                self._emit(run_id, event_type, message, data)
+
             solver = construct_solver(
                 llm_engine_name=request.llm_engine_name,
                 enabled_tools=request.enabled_tools,
@@ -139,6 +158,7 @@ class RunManager:
                 verbose=request.verbose,
                 base_url=request.base_url,
                 temperature=request.temperature,
+                event_callback=on_solver_event,
             )
             self._emit(run_id, "solver_ready", "Solver constructed.")
             output = solver.solve(request.query, image_path=request.image_path)

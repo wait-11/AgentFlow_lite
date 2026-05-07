@@ -1,7 +1,7 @@
 import argparse
 import time
 import json
-from typing import Optional
+from typing import Any, Callable, Optional
 
 from agentflow.agentflow.models.initializer import Initializer
 from agentflow.agentflow.models.planner import Planner
@@ -23,7 +23,8 @@ class Solver:
         max_tokens: int = 4000,
         root_cache_dir: str = "cache",
         verbose: bool = True,
-        temperature: float = .0
+        temperature: float = .0,
+        event_callback: Optional[Callable[[str, dict[str, Any]], None]] = None
     ):
         self.planner = planner
         self.verifier = verifier
@@ -38,6 +39,17 @@ class Solver:
         self.temperature  = temperature
         assert all(output_type in ["base", "final", "direct"] for output_type in self.output_types), "Invalid output type. Supported types are 'base', 'final', 'direct'."
         self.verbose = verbose
+        self.event_callback = event_callback
+
+    def emit_event(self, event_type: str, data: Optional[dict[str, Any]] = None) -> None:
+        if self.event_callback is None:
+            return
+        try:
+            self.event_callback(event_type, data or {})
+        except Exception:
+            if self.verbose:
+                print(f"[Trace Warning]: failed to emit event '{event_type}'")
+
     def solve(self, question: str, image_path: Optional[str] = None):
         """
         Solve a single problem from the benchmark dataset.
@@ -53,6 +65,18 @@ class Solver:
             "query": question,
             "image": image_path
         }
+        self.emit_event(
+            "query_received",
+            {
+                "module": "solver",
+                "query": question,
+                "image_path": image_path,
+                "output_types": self.output_types,
+                "max_steps": self.max_steps,
+                "max_time": self.max_time,
+                "max_tokens": self.max_tokens,
+            },
+        )
         if self.verbose:
             print(f"\n==> 🔍 Received Query: {question}")
             if image_path:
@@ -60,8 +84,17 @@ class Solver:
 
         # Generate base response if requested
         if 'base' in self.output_types:
+            local_start_time = time.time()
             base_response = self.planner.generate_base_response(question, image_path, self.max_tokens)
             json_data["base_response"] = base_response
+            self.emit_event(
+                "base_response",
+                {
+                    "module": "planner",
+                    "response": base_response,
+                    "duration": round(time.time() - local_start_time, 2),
+                },
+            )
             if self.verbose:
                 print(f"\n==> 📝 Base Response from LLM:\n\n{base_response}")
 
@@ -78,6 +111,15 @@ class Solver:
             query_start_time = time.time()
             query_analysis = self.planner.analyze_query(question, image_path)
             json_data["query_analysis"] = query_analysis
+            self.emit_event(
+                "query_analysis",
+                {
+                    "step": 0,
+                    "module": "planner",
+                    "analysis": query_analysis,
+                    "duration": round(time.time() - query_start_time, 2),
+                },
+            )
             if self.verbose:
                 print(f"\n==> 🔍 Step 0: Query Analysis\n")
                 print(f"{query_analysis}")
@@ -86,6 +128,7 @@ class Solver:
             # Main execution loop
             step_count = 0
             action_times = []
+            memory_actions = {}
             while step_count < self.max_steps and (time.time() - query_start_time) < self.max_time:
                 step_count += 1
                 step_start_time = time.time()
@@ -102,6 +145,18 @@ class Solver:
                     json_data
                 )
                 context, sub_goal, tool_name = self.planner.extract_context_subgoal_and_tool(next_step)
+                self.emit_event(
+                    "planner_action",
+                    {
+                        "step": step_count,
+                        "module": "planner",
+                        "raw_output": next_step,
+                        "context": context,
+                        "sub_goal": sub_goal,
+                        "tool_name": tool_name,
+                        "duration": round(time.time() - local_start_time, 2),
+                    },
+                )
                 if self.verbose:
                     print(f"\n==> 🎯 Step {step_count}: Action Prediction ({tool_name})\n")
                     print(f"[Context]: {context}\n[Sub Goal]: {sub_goal}\n[Tool]: {tool_name}")
@@ -111,6 +166,17 @@ class Solver:
                     print(f"\n==> 🚫 Error: Tool '{tool_name}' is not available or not found.")
                     command = "No command was generated because the tool was not found."
                     result = "No result was generated because the tool was not found."
+                    self.emit_event(
+                        "tool_unavailable",
+                        {
+                            "step": step_count,
+                            "module": "executor",
+                            "tool_name": tool_name,
+                            "available_tools": self.planner.available_tools,
+                            "command": command,
+                            "result": result,
+                        },
+                    )
 
                 else:
                     # [3] Generate the tool command
@@ -126,6 +192,19 @@ class Solver:
                         json_data
                     )
                     analysis, explanation, command = self.executor.extract_explanation_and_command(tool_command)
+                    self.emit_event(
+                        "executor_command",
+                        {
+                            "step": step_count,
+                            "module": "executor",
+                            "tool_name": tool_name,
+                            "raw_output": tool_command,
+                            "analysis": analysis,
+                            "explanation": explanation,
+                            "command": command,
+                            "duration": round(time.time() - local_start_time, 2),
+                        },
+                    )
                     if self.verbose:
                         print(f"\n==> 📝 Step {step_count}: Command Generation ({tool_name})\n")
                         print(f"[Analysis]: {analysis}\n[Explanation]: {explanation}\n[Command]: {command}")
@@ -136,6 +215,17 @@ class Solver:
                     result = self.executor.execute_tool_command(tool_name, command)
                     result = make_json_serializable_truncated(result) # Convert to JSON serializable format
                     json_data[f"tool_result_{step_count}"] = result
+                    self.emit_event(
+                        "tool_result",
+                        {
+                            "step": step_count,
+                            "module": "executor",
+                            "tool_name": tool_name,
+                            "command": command,
+                            "result": result,
+                            "duration": round(time.time() - local_start_time, 2),
+                        },
+                    )
 
                     if self.verbose:
                         print(f"\n==> 🛠️ Step {step_count}: Command Execution ({tool_name})\n")
@@ -149,6 +239,18 @@ class Solver:
                 # Update memory
                 self.memory.add_action(step_count, tool_name, sub_goal, command, result)
                 memory_actions = self.memory.get_actions()
+                self.emit_event(
+                    "memory_update",
+                    {
+                        "step": step_count,
+                        "module": "memory",
+                        "tool_name": tool_name,
+                        "sub_goal": sub_goal,
+                        "command": command,
+                        "result": result,
+                        "memory": make_json_serializable_truncated(memory_actions),
+                    },
+                )
 
                 # [5] Verify memory (context verification)
                 local_start_time = time.time()
@@ -161,6 +263,17 @@ class Solver:
                     json_data
                 )
                 context_verification, conclusion = self.verifier.extract_conclusion(stop_verification)
+                self.emit_event(
+                    "verifier_result",
+                    {
+                        "step": step_count,
+                        "module": "verifier",
+                        "raw_output": stop_verification,
+                        "analysis": context_verification,
+                        "conclusion": conclusion,
+                        "duration": round(time.time() - local_start_time, 2),
+                    },
+                )
                 if self.verbose:
                     conclusion_emoji = "✅" if conclusion == 'STOP' else "🛑"
                     print(f"\n==> 🤖 Step {step_count}: Context Verification\n")
@@ -180,18 +293,39 @@ class Solver:
 
             # Generate final output if requested
             if 'final' in self.output_types:
+                local_start_time = time.time()
                 final_output = self.planner.generate_final_output(question, image_path, self.memory)
                 json_data["final_output"] = final_output
-                print(f"\n==> 🐙 Detailed Solution:\n\n{final_output}")
+                self.emit_event(
+                    "final_output",
+                    {
+                        "module": "planner",
+                        "output": final_output,
+                        "duration": round(time.time() - local_start_time, 2),
+                    },
+                )
+                if self.verbose:
+                    print(f"\n==> 🐙 Detailed Solution:\n\n{final_output}")
 
             # Generate direct output if requested
             if 'direct' in self.output_types:
+                local_start_time = time.time()
                 direct_output = self.planner.generate_direct_output(question, image_path, self.memory)
                 json_data["direct_output"] = direct_output
-                print(f"\n==> 🐙 Final Answer:\n\n{direct_output}")
+                self.emit_event(
+                    "direct_output",
+                    {
+                        "module": "planner",
+                        "output": direct_output,
+                        "duration": round(time.time() - local_start_time, 2),
+                    },
+                )
+                if self.verbose:
+                    print(f"\n==> 🐙 Final Answer:\n\n{direct_output}")
 
-            print(f"\n[Total Time]: {round(time.time() - query_start_time, 2)}s")
-            print(f"\n==> ✅ Query Solved!")
+            if self.verbose:
+                print(f"\n[Total Time]: {round(time.time() - query_start_time, 2)}s")
+                print(f"\n==> ✅ Query Solved!")
 
         return json_data
 
@@ -207,7 +341,8 @@ def construct_solver(llm_engine_name : str = "gpt-4o",
                      verbose : bool = True,
                      vllm_config_path : str = None,
                      base_url : str = None,
-                     temperature: float = 0.0
+                     temperature: float = 0.0,
+                     event_callback: Optional[Callable[[str, dict[str, Any]], None]] = None
                      ):
 
     # Parse model_engine configuration
@@ -274,7 +409,8 @@ def construct_solver(llm_engine_name : str = "gpt-4o",
         max_tokens=max_tokens,
         root_cache_dir=root_cache_dir,
         verbose=verbose,
-        temperature=temperature
+        temperature=temperature,
+        event_callback=event_callback
     )
     return solver
 
