@@ -5,6 +5,7 @@
 ## 环境要求
 
 - Python 3.11
+- Node.js 20+（仅前端开发或重新构建工作台时需要）
 - Windows / Linux / macOS
 - 至少一个 LLM API Key（DashScope 或 OpenAI）
 
@@ -114,6 +115,59 @@ $env:PYTHONIOENCODING = "utf-8"
   --max_time 300 `
   --temperature 0.0
 ```
+
+### 方式三：启动后端工作台
+
+macOS / Linux:
+
+```bash
+PYTHONIOENCODING=utf-8 .venv/bin/python scripts/start_backend.py
+```
+
+Windows PowerShell:
+
+```powershell
+.\start_backend.bat
+```
+
+启动后访问：
+
+```text
+http://127.0.0.1:8010/
+```
+
+API 文档：
+
+```text
+http://127.0.0.1:8010/docs
+```
+
+工作台前端使用 Vue 3 + Vite。若只想使用后端服务出的构建产物，直接访问 `http://127.0.0.1:8010/` 即可。
+
+前端开发模式：
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+开发服务默认地址：
+
+```text
+http://127.0.0.1:5173/
+```
+
+Vite 会将 `/api`、`/assets`、`/docs` 代理到 `http://127.0.0.1:8010`，所以开发模式下仍需先启动后端。
+
+构建前端产物：
+
+```bash
+cd frontend
+npm run build
+```
+
+构建后会生成 `frontend/dist/`。后端启动时会优先服务 `frontend/dist/`；如果该目录不存在，则回退到 `frontend/`。
 
 ### 参数说明
 

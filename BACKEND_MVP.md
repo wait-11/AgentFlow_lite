@@ -11,8 +11,7 @@
 ```powershell
 .\start_backend.bat
 ```
-
-启动成功后访问：
+启动成功后打开：
 
 ```text
 http://127.0.0.1:8010/
@@ -44,6 +43,14 @@ http://127.0.0.1:8010/api/health
 .\start_backend.bat --keep-proxy
 ```
 
+macOS / Linux 对应写法：
+
+```bash
+PYTHONIOENCODING=utf-8 .venv/bin/python scripts/start_backend.py --port 8011
+PYTHONIOENCODING=utf-8 .venv/bin/python scripts/start_backend.py --reload
+PYTHONIOENCODING=utf-8 .venv/bin/python scripts/start_backend.py --keep-proxy
+```
+
 说明：
 
 - 默认端口是 `8010`。
@@ -51,6 +58,17 @@ http://127.0.0.1:8010/api/health
 - 如果确实需要使用系统代理，请加 `--keep-proxy`。
 
 ## 手动启动
+
+macOS / Linux:
+
+```bash
+export PYTHONIOENCODING=utf-8
+unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy
+
+.venv/bin/python -m uvicorn backend.api:app --host 127.0.0.1 --port 8010 --reload
+```
+
+Windows PowerShell:
 
 ```powershell
 $env:PYTHONIOENCODING = "utf-8"
@@ -290,32 +308,79 @@ data: {"event_id":1,"run_id":"run-...","type":"planner_action","message":"...","
 
 ## 前端工作台
 
-项目根目录有一个零构建静态前端：
+工作台前端已迁移到 Vue 3 + Vite，源码位于 `frontend/src/`：
 
 ```text
 frontend/index.html
-frontend/styles.css
-frontend/app.js
+frontend/package.json
+frontend/vite.config.js
+frontend/src/main.js
+frontend/src/App.vue
+frontend/src/components/
+frontend/src/composables/
+frontend/src/constants/
+frontend/src/services/
+frontend/src/utils/
 ```
 
-启动后端后访问：
+启动后端后访问构建后的工作台：
 
 ```text
 http://127.0.0.1:8010/
 ```
 
-当前前端可以提交任务、查看任务状态、展示事件流和最终答案。下一步建议基于新增的 AgentFlow 轨迹事件升级为：
+后端静态文件策略：
 
-- Timeline：按 step 展示 `query_analysis`、`planner_action`、`executor_command`、`tool_result`、`verifier_result`。
-- Memory Panel：监听 `memory_update`，展示当前 accumulated memory。
-- Final Answer：监听 `final_output` / `direct_output`。
-- Raw JSON：保留事件原始 JSON，方便调试和复现实验。
+- 如果 `frontend/dist/` 存在，FastAPI 会优先服务 Vite 构建产物。
+- 如果 `frontend/dist/` 不存在，FastAPI 会回退服务 `frontend/`。
+
+前端开发模式：
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Vite 开发服务默认地址：
+
+```text
+http://127.0.0.1:5173/
+```
+
+开发服务会将 `/api`、`/assets`、`/docs`、`/openapi.json` 代理到 `http://127.0.0.1:8010`。因此开发前端时仍需先启动后端。
+
+构建前端：
+
+```bash
+cd frontend
+npm run build
+```
+
+当前前端可以提交任务、查看任务状态、展示最终答案、展示最近任务，并基于 SSE 轨迹事件可视化四个角色的分工：
+
+- Planner：监听 `query_analysis`、`planner_action`、`final_output`、`direct_output` 等事件，展示问题分析、下一步目标、工具选择和答案生成。
+- Executor：监听 `executor_command`、`tool_result`、`tool_unavailable`，展示工具命令生成和执行结果。
+- Memory：监听 `memory_update`，展示上下文记录活动。
+- Verifier：监听 `verifier_result`，展示是否继续推理或停止输出的判断。
+
+前端目录职责：
+
+```text
+frontend/src/App.vue                 页面组合入口
+frontend/src/components/             纯 UI 组件
+frontend/src/composables/            工作台状态、SSE 和业务动作
+frontend/src/constants/              事件类型、状态映射、角色定义
+frontend/src/services/               API 请求封装
+frontend/src/utils/                  时间格式化、结果摘要、角色卡片构造
+frontend/src/styles.css              样式入口，引入 frontend/styles.css
+frontend/styles.css                  全局工作台样式
+```
 
 ## 当前限制
 
 - 任务状态仍保存在内存中，后端重启后历史任务会清空。
 - solver 仍是同步执行，只是放到了后台线程中。
-- SSE 已经支持 AgentFlow 轨迹事件，但前端还需要进一步做结构化展示。
 - `Google_Search_Tool` 需要 `GOOGLE_API_KEY`。
 - `Wikipedia_Search_Tool` 依赖英文 Wikipedia 和部分 OpenAI 配置，建议先用 `Base_Generator_Tool` 测主链路。
 - 轨迹目前还没有持久化为 `events.jsonl`，后续 benchmark 和训练数据导出需要补这一层。
@@ -330,5 +395,7 @@ backend/schemas.py        请求、响应、事件等数据结构
 scripts/start_backend.py  PyCharm 和命令行启动入口
 start_backend.bat         Windows 一键启动脚本
 agentflow/agentflow/      AgentFlow 算法与推理核心
-frontend/                 静态前端工作台
+frontend/                 Vue + Vite 前端工作台
+frontend/src/             Vue 源码
+frontend/dist/            Vite 构建产物，存在时由 FastAPI 优先服务
 ```

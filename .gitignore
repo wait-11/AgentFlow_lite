@@ -10,7 +10,10 @@ checkpoints/
 triples/
 triples_texts/
 *.json
+!frontend/package.json
+!frontend/package-lock.json
 *.log
+node_modules/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

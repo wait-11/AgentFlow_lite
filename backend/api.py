@@ -15,6 +15,7 @@ from .schemas import ModelPreset, RunCreatedResponse, RunRecord, RunRequest, Too
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 FRONTEND_DIR = PROJECT_ROOT / "frontend"
+FRONTEND_DIST_DIR = FRONTEND_DIR / "dist"
 ASSETS_DIR = PROJECT_ROOT / "assets"
 
 TOOLS = [
@@ -123,7 +124,9 @@ def create_app() -> FastAPI:
     if ASSETS_DIR.exists():
         app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)), name="assets")
 
-    if FRONTEND_DIR.exists():
+    if FRONTEND_DIST_DIR.exists():
+        app.mount("/", StaticFiles(directory=str(FRONTEND_DIST_DIR), html=True), name="frontend")
+    elif FRONTEND_DIR.exists():
         app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
 
     return app
