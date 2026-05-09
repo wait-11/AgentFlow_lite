@@ -1,5 +1,4 @@
 import os
-import sys
 import wikipedia
 from pydantic import BaseModel
 
@@ -40,7 +39,7 @@ class Select_Relevant_Queries(BaseModel):
 
 def select_relevant_queries(original_query: str, query_candidates: list[str], llm_engine):
 
-    query_candidates = "\n".join([f"{i}. {query}" for i, query in enumerate(query_candidates)])
+    query_candidates_str = "\n".join([f"{i}. {query}" for i, query in enumerate(query_candidates)])
 
     prompt = f"""
 You are an expert AI assistant. Your task is to identify and select the most relevant queries from a list of Wikipedia search results that are most likely to address the user’s original question.
@@ -48,73 +47,61 @@ You are an expert AI assistant. Your task is to identify and select the most rel
 ## Input
 
 Original Query: `{original_query}`
-Query Candidates from Wikipedia Search: `{query_candidates}`
+Query Candidates from Wikipedia Search: `{query_candidates_str}`
 
 ## Instructions
 
 1. Carefully read the original query and the list of query candidates.
 2. Select the query candidates that are most relevant to the original query — i.e., those most likely to contain the information needed to answer the question.
 3. Return the most relevant queries. If you think multiple queries are helpful, you can return up to 3 queries.
-4. Return your output in the following format:
 
-```
-- Matched Queries: <list of matched queries>
-- Matched Query IDs: <list of matched query ids>. Please make sure the ids are integers. And do not return empty list.
-```
+Your response MUST be a valid JSON object with these exact fields:
+- "matched_queries": A list of the matched query strings (e.g. ["France"]).
+- "matched_query_ids": A list of the matched query integer IDs (e.g. [1]). Do not return an empty list.
+
+Do NOT wrap the JSON in markdown code blocks. Output ONLY the raw JSON object.
 
 ## Examples
 
 Original Query: What is the capital of France?
-Query Candidates from Wikipedia Search:
-0. Closed-ended question
-1. France
-2. What Is a Nation?
-3. Capital city
-4. London
-5. WhatsApp
-6. French Revolution
-7. Communes of France
-8. Capital punishment
-9. Louis XIV
-
-Output:
-- Matched Queries: France  
-- Matched Query IDs: [1]
-
+Query Candidates: 0. Closed-ended question, 1. France, 2. Capital city
+Output: {{"matched_queries": ["France"], "matched_query_ids": [1]}}
 
 Original Query: What is the mass of the moon?
-Query Candidates from Wikipedia Search:
-0. Moon
-1. Planetary-mass moon
-2. What If the Moon Didn't Exist
-3. Earth mass
-4. Moon landing
-5. Mass
-6. Colonization of the Moon
-7. Planetary mass
-8. Hollow Moon
-9. Gravitation of the Moon
-
-Output:
-- Matched Queries: Moon, Planetary-mass moon  
-- Matched Query IDs: [0, 1]
+Query Candidates: 0. Moon, 1. Planetary-mass moon, 2. Earth mass
+Output: {{"matched_queries": ["Moon", "Planetary-mass moon"], "matched_query_ids": [0, 1]}}
 """
 
     try:
-        prompt = prompt.format(original_query=original_query, query_candidates=query_candidates)     
-
         response = llm_engine.generate(prompt, response_format=Select_Relevant_Queries)
-        # print(response)
 
-        matched_queries = response.matched_queries
-        matched_query_ids = [int(i) for i in response.matched_query_ids]
+        # Handle different response types: Pydantic model, dict, or string
+        if isinstance(response, Select_Relevant_Queries):
+            matched_queries = response.matched_queries
+            matched_query_ids = [int(i) for i in response.matched_query_ids]
+        elif isinstance(response, dict):
+            matched_queries = response.get("matched_queries", [])
+            matched_query_ids = [int(i) for i in response.get("matched_query_ids", [])]
+        elif isinstance(response, str):
+            import json
+            try:
+                data = json.loads(response)
+                matched_queries = data.get("matched_queries", [])
+                matched_query_ids = [int(i) for i in data.get("matched_query_ids", [])]
+            except json.JSONDecodeError:
+                print(f"Error parsing LLM response as JSON: {response[:200]}")
+                return [], []
+        else:
+            print(f"Unexpected response type: {type(response)}")
+            return [], []
+
         return matched_queries, matched_query_ids
     except Exception as e:
         print(f"Error selecting relevant queries: {e}")
         return [], []
 
 class Wikipedia_Search_Tool(BaseTool):
-    def __init__(self, model_string="gpt-4o-mini"):
+    def __init__(self, model_string="gpt-4o-mini", base_url: str = None, **kwargs):
         super().__init__(
             tool_name=TOOL_NAME,
             tool_description="A tool that searches Wikipedia and returns relevant pages with their page titles, URLs, abstract, and retrieved information based on a given query.",
@@ -142,7 +129,12 @@ class Wikipedia_Search_Tool(BaseTool):
                 "best_practice": BEST_PRACTICE
             }
         )
-        self.llm_engine = create_llm_engine(model_string=model_string, temperature=0.0, top_p=1.0, frequency_penalty=0.0, presence_penalty=0.0)
+        self.model_string = model_string
+        self.base_url = base_url
+        self.llm_engine = create_llm_engine(
+            model_string=model_string, base_url=base_url,
+            temperature=0.0, top_p=1.0, frequency_penalty=0.0, presence_penalty=0.0
+        )
 
     def _get_wikipedia_url(self, query):
         """
@@ -208,32 +200,33 @@ class Wikipedia_Search_Tool(BaseTool):
         Returns:
             dict: A dictionary containing the search results and all matching pages with their content.
         """
-        # Check if OpenAI API key is set
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            sys.exit("[Wikipedia RAG Search] Error: OPENAI_API_KEY environment variable is not set.")
-            
         # First get relevant queries from the search results
         search_results = self.search_wikipedia(query)
 
-        # Get the titles of the pages   
+        # Get the titles of the pages
         titles = [page["title"] for page in search_results if page["title"] is not None]
         if not titles:
             return {"query": query, "relevant_pages": [], "other_pages (may be irrelevant to the query)": search_results}
 
         # Select the most relevant pages
         matched_queries, matched_query_ids = select_relevant_queries(query, titles, self.llm_engine)
-        
+
+        # If LLM filtering failed, return all results as other_pages for the agent to use
+        if not matched_query_ids:
+            return {"query": query, "relevant_pages": [], "other_pages (may be irrelevant to the query)": search_results}
+
         # Only process the most relevant pages
-        pages_data = [search_results[i] for i in matched_query_ids]
-        other_pages = [search_results[i] for i in range(len(search_results)) if i not in matched_query_ids]
+        valid_ids = [i for i in matched_query_ids if i < len(search_results)]
+        pages_data = [search_results[i] for i in valid_ids]
+        other_pages = [search_results[i] for i in range(len(search_results)) if i not in valid_ids]
 
         # For each relevant page, get detailed information using Web RAG
         try:
             web_rag_tool = Web_Search_Tool(model_string=self.model_string)
         except Exception as e:
             print(f"Error creating Web RAG tool: {e}")
-            return {"query": query, "relevant_pages": [], "other_pages (may be irrelevant to the query)": search_results}
+            return {"query": query, "relevant_pages": pages_data if pages_data else [],
+                    "other_pages (may be irrelevant to the query)": search_results}
 
         for page in pages_data:
             url = page["url"]

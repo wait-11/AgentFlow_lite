@@ -225,6 +225,7 @@ def construct_solver(llm_engine_name : str = "gpt-4o",
         model_string=llm_engine_name,
         verbose=verbose,
         vllm_config_path=vllm_config_path,
+        base_url=base_url,
     )
 
     # Instantiate Planner

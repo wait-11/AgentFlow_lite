@@ -43,6 +43,7 @@ def create_llm_engine(model_string: str, use_cache: bool = False, is_multimodal:
             "model_string": model_string,
             "use_cache": use_cache,
             "is_multimodal": is_multimodal,
+            "base_url": kwargs.get("base_url", None),
             "temperature": kwargs.get("temperature", 0.7),
             "top_p": kwargs.get("top_p", 0.9),
             "frequency_penalty": kwargs.get("frequency_penalty", 0.5),

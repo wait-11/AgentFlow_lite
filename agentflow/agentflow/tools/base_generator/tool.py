@@ -22,15 +22,13 @@ For optimal results with the {TOOL_NAME}:
 class Base_Generator_Tool(BaseTool):
     require_llm_engine = True
 
-    def __init__(self, model_string="gpt-4o-mini"):
+    def __init__(self, model_string="gpt-4o-mini", base_url: str = None):
         super().__init__(
             tool_name=TOOL_NAME,
             tool_description="A generalized tool that takes query from the user, and answers the question step by step to the best of its ability. It can also accept an image.",
             tool_version="1.0.0",
             input_types={
                 "query": "str - The query that includes query from the user to guide the agent to generate response.",
-                # "query": "str - The query that includes query from the user to guide the agent to generate response (Examples: 'Describe this image in detail').",
-                # "image": "str - The path to the image file if applicable (default: None).",
             },
             output_type="str - The generated response to the original query",
             demo_commands=[
@@ -38,39 +36,23 @@ class Base_Generator_Tool(BaseTool):
                     "command": 'execution = tool.execute(query="Summarize the following text in a few lines")',
                     "description": "Generate a short summary given the query from the user."
                 },
-                # {
-                #     "command": 'execution = tool.execute(query="Explain the mood of this scene.", image="path/to/image1.png")',
-                #     "description": "Generate a caption focusing on the mood using a specific query and image."
-                # },
-                # {
-                    # "command": 'execution = tool.execute(query="Give your best coordinate estimate for the pacemaker in the image and return (x1, y1, x2, y2)", image="path/to/image2.png")',
-                    # "description": "Generate bounding box coordinates given the image and query from the user. The format should be (x1, y1, x2, y2)."
-                # },
-                # {
-                #     "command": 'execution = tool.execute(query="Is the number of tiny objects that are behind the small metal jet less than the number of tiny things left of the tiny sedan?", image="path/to/image2.png")',
-                #     "description": "Answer a question step by step given the image."
-                # }
             ],
-
             user_metadata = {
                 "limitation": LIMITATION,
                 "best_practice": BEST_PRACTICE
             }
-
         )
-        self.model_string = model_string  
+        self.model_string = model_string
         print(f"Initializing Generalist Tool with model: {self.model_string}")
-        # multimodal = True if image else False
         multimodal = False
-        # llm_engine = create_llm_engine(model_string=self.model_string, is_multimodal=multimodal, base_url=self.base_url)
-        
-        # NOTE: deterministic mode
+
         self.llm_engine = create_llm_engine(
-            model_string=self.model_string, 
-            is_multimodal=multimodal, 
-            temperature=0.0, 
-            top_p=1.0, 
-            frequency_penalty=0.0, 
+            model_string=self.model_string,
+            is_multimodal=multimodal,
+            base_url=base_url,
+            temperature=0.0,
+            top_p=1.0,
+            frequency_penalty=0.0,
             presence_penalty=0.0
             )
 
