@@ -58,7 +58,7 @@ export function useWorkbench() {
   }
 
   function selectBasicTools() {
-    form.selectedTools = new Set(["Base_Generator_Tool"]);
+    form.selectedTools = new Set(["Base_Generator_Tool", "SerpBase_Search_Tool"]);
   }
 
   function buildPayload() {
@@ -146,7 +146,10 @@ export function useWorkbench() {
     models.value = loadedModels;
     tools.value = loadedTools;
     form.model = loadedModels[0]?.name || "dashscope";
-    form.selectedTools = new Set(loadedTools[0] ? [loadedTools[0].name] : []);
+    const defaultTools = ["Base_Generator_Tool", "SerpBase_Search_Tool"].filter((name) =>
+      loadedTools.some((tool) => tool.name === name),
+    );
+    form.selectedTools = new Set(defaultTools.length ? defaultTools : loadedTools[0] ? [loadedTools[0].name] : []);
   }
 
   async function loadRuns() {

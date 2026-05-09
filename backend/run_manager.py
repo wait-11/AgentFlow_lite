@@ -53,6 +53,19 @@ SOLVER_EVENT_MESSAGES = {
     "direct_output": "Direct final answer generated.",
 }
 
+DEFAULT_TOOL_ENGINES = {
+    "Base_Generator_Tool": "self",
+    "Python_Coder_Tool": "self",
+    "SerpBase_Search_Tool": "Default",
+    "Wikipedia_Search_Tool": "self",
+}
+
+
+def _resolve_tool_engine(enabled_tools: List[str], requested: Optional[List[str]]) -> List[str]:
+    if requested is not None:
+        return requested
+    return [DEFAULT_TOOL_ENGINES.get(tool, "Default") for tool in enabled_tools]
+
 
 class RunManager:
     def __init__(self, max_workers: int = 2):
@@ -126,9 +139,7 @@ class RunManager:
             self._set_status(run_id, RunStatus.RUNNING, started_at=_utcnow())
             self._emit(run_id, "started", "Solver started.", {"llm_engine_name": request.llm_engine_name})
 
-            tool_engine = request.tool_engine
-            if tool_engine is None:
-                tool_engine = ["self" for _ in request.enabled_tools]
+            tool_engine = _resolve_tool_engine(request.enabled_tools, request.tool_engine)
 
             self._emit(
                 run_id,

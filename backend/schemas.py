@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field, model_validator
 
 
-DEFAULT_ENABLED_TOOLS = ["Base_Generator_Tool"]
+DEFAULT_ENABLED_TOOLS = ["Base_Generator_Tool", "SerpBase_Search_Tool"]
 DEFAULT_MODEL_ENGINE = ["trainable", "dashscope", "dashscope", "dashscope"]
 
 
