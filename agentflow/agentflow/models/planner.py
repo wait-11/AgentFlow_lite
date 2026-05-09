@@ -19,7 +19,7 @@ class Planner:
         self.llm_engine_fixed_name = llm_engine_fixed_name
         self.is_multimodal = is_multimodal
         # self.llm_engine_mm = create_llm_engine(model_string=llm_engine_name, is_multimodal=False, base_url=base_url, temperature = temperature)
-        self.llm_engine_fixed = create_llm_engine(model_string=llm_engine_fixed_name, is_multimodal=False, temperature = temperature)
+        self.llm_engine_fixed = create_llm_engine(model_string=llm_engine_fixed_name, is_multimodal=False, base_url=base_url, temperature = temperature)
         self.llm_engine = create_llm_engine(model_string=llm_engine_name, is_multimodal=False, base_url=base_url, temperature = temperature)
         self.toolbox_metadata = toolbox_metadata if toolbox_metadata is not None else {}
         self.available_tools = available_tools if available_tools is not None else []
@@ -78,18 +78,18 @@ Instructions:
 1. Carefully read and understand the query and any accompanying inputs.
 2. Identify the main objectives or tasks within the query.
 3. List the specific skills that would be necessary to address the query comprehensively.
-4. Examine the available tools in the toolbox and determine which ones might relevant and useful for addressing the query. Make sure to consider the user metadata for each tool, including limitations and potential applications (if available).
+4. Examine the available tools in the toolbox and determine which ones might be relevant and useful for addressing the query. Make sure to consider the user metadata for each tool, including limitations and potential applications (if available).
 5. Provide a brief explanation for each skill and tool you've identified, describing how it would contribute to answering the query.
 
-Your response should include:
-1. A concise summary of the query's main points and objectives, as well as content in any accompanying inputs.
-2. A list of required skills, with a brief explanation for each.
-3. A list of relevant tools from the toolbox, with a brief explanation of how each tool would be utilized and its potential limitations.
-4. Any additional considerations that might be important for addressing the query effectively.
+Your response MUST be a valid JSON object with these exact fields:
+- "concise_summary": A concise summary of the query's main points, objectives, and any accompanying inputs.
+- "required_skills": A list of required skills, with a brief explanation for each.
+- "relevant_tools": A list of relevant tools from the toolbox, with a brief explanation of how each tool would be utilized and its potential limitations.
+- "additional_considerations": Any additional considerations that might be important for addressing the query effectively.
 
-Please present your analysis in a clear, structured format.
+Do NOT wrap the JSON in markdown code blocks. Output ONLY the raw JSON object.
                         """
-        else: 
+        else:
             query_prompt = f"""
 Task: Analyze the given query to determine necessary skills and tools.
 
@@ -104,9 +104,13 @@ Instructions:
 3. For each skill and tool, explain how it helps address the query.
 4. Note any additional considerations.
 
-Format your response with a summary of the query, lists of skills and tools with explanations, and a section for additional considerations.
+Your response MUST be a valid JSON object with these exact fields:
+- "concise_summary": Summary of the query's main objectives.
+- "required_skills": Required skills with explanations.
+- "relevant_tools": Relevant tools with explanations of how each helps.
+- "additional_considerations": Any additional important notes.
 
-Be biref and precise with insight. 
+Do NOT wrap the JSON in markdown code blocks. Output ONLY the raw JSON object.
 """
 
 
@@ -153,6 +157,10 @@ Be biref and precise with insight.
                 # Attempt to parse the response as JSON
                 try:
                     response_dict = json.loads(response)
+                    # Coerce non-string fields to strings (Qwen sometimes outputs {} instead of "")
+                    for field in ("context", "sub_goal", "tool_name", "justification"):
+                        if field in response_dict and not isinstance(response_dict[field], str):
+                            response_dict[field] = json.dumps(response_dict[field], ensure_ascii=False) if response_dict[field] else ""
                     response = NextStep(**response_dict)
                 except Exception as e:
                     print(f"Failed to parse response as JSON: {str(e)}")
@@ -218,41 +226,19 @@ Instructions:
 
 4. Formulate a specific, achievable sub-goal for the selected tool that maximizes progress towards answering the query.
 
-Response Format:
-Your response MUST follow this structure:
-1. Justification: Explain your choice in detail.
-2. Context, Sub-Goal, and Tool: Present the context, sub-goal, and the selected tool ONCE with the following format:
-
-Context: <context>
-Sub-Goal: <sub_goal>
-Tool Name: <tool_name>
-
-Where:
-- <context> MUST include ALL necessary information for the tool to function, structured as follows:
-* Relevant data from previous steps
-* File names or paths created or used in previous steps (list EACH ONE individually)
-* Variable names and their values from previous steps' results
-* Any other context-specific information required by the tool
-- <sub_goal> is a specific, achievable objective for the tool, based on its metadata and previous outcomes.
-It MUST contain any involved data, file names, and variables from Previous Steps and Their Results that the tool can act upon.
-- <tool_name> MUST be the exact name of a tool from the available tools list.
+Your response MUST be a valid JSON object with these exact fields:
+- "justification": Detailed explanation of why this tool and sub-goal were chosen.
+- "context": ALL necessary information for the tool to function, including relevant data from previous steps, file names/paths, variable names and values, and any other context-specific information required by the tool.
+- "sub_goal": A specific, achievable objective for the selected tool, containing any involved data, file names, and variables from previous steps.
+- "tool_name": The EXACT name of a tool from the available tools list: {self.available_tools}
 
 Rules:
 - Select only ONE tool for this step.
 - The sub-goal MUST directly address the query and be achievable by the selected tool.
-- The Context section MUST include ALL necessary information for the tool to function, including ALL relevant file paths, data, and variables from previous steps.
-- The tool name MUST exactly match one from the available tools list: {self.available_tools}.
+- The context MUST include ALL necessary information for the tool to function.
+- The tool_name MUST exactly match one from the available tools list.
 - Avoid redundancy by considering previous steps and building on prior results.
-- Your response MUST conclude with the Context, Sub-Goal, and Tool Name sections IN THIS ORDER, presented ONLY ONCE.
-- Include NO content after these three sections.
-
-Example (do not copy, use only as reference):
-Justification: [Your detailed explanation here]
-Context: Image path: "example/image.jpg", Previous detection results: [list of objects]
-Sub-Goal: Detect and count the number of specific objects in the image "example/image.jpg"
-Tool Name: Object_Detector_Tool
-
-Remember: Your response MUST end with the Context, Sub-Goal, and Tool Name sections, with NO additional content afterwards.
+- Do NOT wrap the JSON in markdown code blocks. Output ONLY the raw JSON object.
                         """
         else:
             prompt_generate_next_step = f"""
@@ -271,17 +257,17 @@ Instructions:
 3. Formulate a specific, achievable **sub-goal** for that tool.
 4. Provide all necessary **context** (data, file names, variables) for the tool to function.
 
-Response Format:
-1.  **Justification:** Explain your choice of tool and sub-goal.
-2.  **Context:** Provide all necessary information for the tool.
-3.  **Sub-Goal:** State the specific objective for the tool.
-4.  **Tool Name:** State the exact name of the selected tool.
+Your response MUST be a valid JSON object with these exact fields:
+- "justification": Why this tool and sub-goal were chosen.
+- "context": All necessary information for the tool (data, file names, variables from previous steps).
+- "sub_goal": Specific, achievable objective for the selected tool.
+- "tool_name": EXACT name of the selected tool from: {self.available_tools}
 
 Rules:
 - Select only ONE tool.
 - The sub-goal must be directly achievable by the selected tool.
-- The Context section must contain all information the tool needs to function.
-- The response must end with the Context, Sub-Goal, and Tool Name sections in that order, with no extra content.
+- The context must contain all information the tool needs to function.
+- Do NOT wrap the JSON in markdown code blocks. Output ONLY the raw JSON object.
                     """
             
         next_step = self.llm_engine(prompt_generate_next_step, response_format=NextStep)

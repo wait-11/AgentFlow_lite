@@ -34,18 +34,18 @@ TOOLS = [
         recommended_engine="self",
     ),
     ToolInfo(
-        name="Google_Search_Tool",
-        display_name="Google 搜索工具",
-        description="使用 Gemini grounding 搜索公开互联网信息。",
-        requires_api_key=["GOOGLE_API_KEY"],
-        recommended_engine="Default",
-    ),
-    ToolInfo(
         name="Wikipedia_Search_Tool",
         display_name="Wikipedia RAG 工具",
         description="检索 Wikipedia 并抽取相关页面信息。",
         requires_api_key=["OPENAI_API_KEY"],
         recommended_engine="self",
+    ),
+    ToolInfo(
+        name="SerpBase_Search_Tool",
+        display_name="SerpBase 搜索工具",
+        description="通过 SerpBase API 获取 Google 风格搜索结果，支持多语言和地区。",
+        requires_api_key=["SERPBASE_API_KEY"],
+        recommended_engine="Default",
     ),
 ]
 

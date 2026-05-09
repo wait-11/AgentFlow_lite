@@ -14,7 +14,7 @@ from tenacity import (
     stop_after_attempt,
     wait_random_exponential,
 )
-from typing import List, Union
+from typing import List, Union, Optional
 
 from .base import EngineLM, CachedEngine
 
@@ -25,6 +25,25 @@ from pydantic import BaseModel
 
 class DefaultFormat(BaseModel):
     response: str
+
+
+def _pydantic_to_json_instruction(response_format) -> Optional[str]:
+    """Convert a Pydantic model to a JSON schema instruction string for prompts."""
+    if response_format is None or not isinstance(response_format, type) or not issubclass(response_format, BaseModel):
+        return None
+    schema = response_format.model_json_schema()
+    props = schema.get("properties", {})
+    required = schema.get("required", [])
+    field_descriptions = []
+    for name, info in props.items():
+        typ = info.get("type", "string")
+        req_mark = " (required)" if name in required else " (optional)"
+        field_descriptions.append(f'    "{name}": <{typ}>{req_mark}')
+    fields_block = ",\n".join(field_descriptions)
+    return f"""\n\nIMPORTANT: You MUST output ONLY a valid JSON object matching this exact schema. Do NOT wrap it in markdown code fences (no ```json). Output the raw JSON only:
+{{
+{fields_block}
+}}"""
 
 
 def validate_chat_model(model_string: str):
@@ -114,15 +133,22 @@ class ChatDashScope(EngineLM, CachedEngine):
 
         sys_prompt_arg = system_prompt if system_prompt else self.system_prompt
 
+        # If response_format is a Pydantic model, inject JSON instructions into the prompt
+        # (DashScope models like qwen2.5-7b don't support native structured output API)
+        augmented_prompt = prompt
+        json_instruction = _pydantic_to_json_instruction(response_format)
+        if json_instruction:
+            augmented_prompt = prompt + json_instruction
+
         if self.use_cache:
-            cache_key = sys_prompt_arg + prompt
+            cache_key = sys_prompt_arg + augmented_prompt
             cache_or_none = self._check_cache(cache_key)
             if cache_or_none is not None:
                 return cache_or_none
-            
+
         messages = [
             {"role": "system", "content": sys_prompt_arg},
-            {"role": "user", "content": prompt}
+            {"role": "user", "content": augmented_prompt}
         ]
 
         request_params = {
@@ -188,6 +214,14 @@ class ChatDashScope(EngineLM, CachedEngine):
     ):
         sys_prompt_arg = system_prompt if system_prompt else self.system_prompt
         formatted_content = self._format_content(content)
+
+        # Inject JSON instructions into the last text item if response_format is a Pydantic model
+        json_instruction = _pydantic_to_json_instruction(response_format)
+        if json_instruction and formatted_content:
+            for item in reversed(formatted_content):
+                if item.get("type") == "text":
+                    item["text"] = item["text"] + json_instruction
+                    break
 
         if self.use_cache:
             cache_key = sys_prompt_arg + json.dumps(formatted_content)

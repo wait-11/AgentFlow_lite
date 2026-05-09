@@ -15,10 +15,6 @@ TOOL_NAME_MAPPING_LONG = {
         "class_name": "Base_Generator_Tool",
         "dir_name": "base_generator"
     },
-    "Ground_Google_Search_Tool": {
-        "class_name": "Google_Search_Tool",
-        "dir_name": "google_search"
-    },
     "Python_Code_Generator_Tool": {
         "class_name": "Python_Coder_Tool",
         "dir_name": "python_coder"
@@ -30,16 +26,20 @@ TOOL_NAME_MAPPING_LONG = {
     "Wikipedia_RAG_Search_Tool": {
         "class_name": "Wikipedia_Search_Tool",
         "dir_name": "wikipedia_search"
+    },
+    "SerpBase_Search_Tool": {
+        "class_name": "SerpBase_Search_Tool",
+        "dir_name": "serpbase_search"
     }
 }
 
 # Short to long mapping for fallback
 TOOL_NAME_MAPPING_SHORT = {
     "Base_Generator_Tool": "Generalist_Solution_Generator_Tool",
-    "Google_Search_Tool": "Ground_Google_Search_Tool",
     "Python_Coder_Tool": "Python_Code_Generator_Tool",
     "Web_Search_Tool": "Web_RAG_Search_Tool",
-    "Wikipedia_Search_Tool": "Wikipedia_RAG_Search_Tool"
+    "Wikipedia_Search_Tool": "Wikipedia_RAG_Search_Tool",
+    "SerpBase_Search_Tool": "SerpBase_Search_Tool"
 }
 
 try:
@@ -95,27 +95,17 @@ Instructions:
 2.  Construct valid Python code that addresses the sub-goal using the provided context and data.
 3.  The command must include at least one call to `tool.execute()`.
 4.  Each `tool.execute()` call must be assigned to a variable named **`execution`**.
-5.  Please give the exact numbers and parameters should be used in the `tool.execute()` call.
+5.  Use the exact numbers and parameters from the context in the `tool.execute()` call.
 
-Output Format:
-Present your response in the following structured format. Do not include any extra text or explanations.
+Your response MUST be a valid JSON object with these exact fields:
+- "analysis": Analysis of the tool's required parameters and how they map to the sub-goal.
+- "explanation": Step-by-step explanation of how the generated command addresses the sub-goal.
+- "command": The Python code to execute, containing `execution = tool.execute(...)`. Do NOT wrap in markdown code blocks - output the raw Python code as a string value.
 
-Generated Command:
-```python
-<command>
-```
+Example value for "command":
+execution = tool.execute(query="What is the capital of France?")
 
-Example1:
-Generated Command:
-```python
-execution = tool.execute(query="Summarize the following porblom:"Isaac has 100 toys, masa gets ...., how much are their together?")
-```
-
-Example2:
-Generated Command:
-```python
-execution = tool.execute(query=["Methanol", "function of hyperbola", "Fermat's Last Theorem"])
-```
+Do NOT wrap the JSON in markdown code blocks. Output ONLY the raw JSON object.
 """
 
         tool_command = self.llm_generate_tool_command(prompt_generate_tool_command, response_format=ToolCommand)
@@ -138,6 +128,10 @@ execution = tool.execute(query=["Methanol", "function of hyperbola", "Fermat's L
             # Attempt to parse as JSON first
             try:
                 response_dict = json.loads(response)
+                # Coerce non-string fields to strings (LLM may output {} instead of "")
+                for field in ("analysis", "explanation", "command"):
+                    if field in response_dict and not isinstance(response_dict[field], str):
+                        response_dict[field] = json.dumps(response_dict[field], ensure_ascii=False) if response_dict[field] else ""
                 response_obj = ToolCommand(**response_dict)
                 analysis = response_obj.analysis.strip()
                 explanation = response_obj.explanation.strip()

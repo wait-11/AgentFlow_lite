@@ -18,7 +18,7 @@ class Verifier:
         self.llm_engine_name = llm_engine_name
         self.llm_engine_fixed_name = llm_engine_fixed_name
         self.is_multimodal = is_multimodal
-        self.llm_engine_fixed = create_llm_engine(model_string=llm_engine_fixed_name, is_multimodal=False, temperature=temperature)
+        self.llm_engine_fixed = create_llm_engine(model_string=llm_engine_fixed_name, is_multimodal=False, base_url=base_url, temperature=temperature)
         self.llm_engine = create_llm_engine(model_string=llm_engine_name, is_multimodal=False, base_url=base_url, temperature=temperature)
         self.toolbox_metadata = toolbox_metadata if toolbox_metadata is not None else {}
         self.available_tools = available_tools if available_tools is not None else []
@@ -87,21 +87,11 @@ Detailed Instructions:
 5. Final Determination:
    Based on your thorough analysis, decide if the memory is complete and accurate enough to generate the final output, or if additional tool usage is necessary.
 
-Response Format:
+Your response MUST be a valid JSON object with these exact fields:
+- "analysis": Detailed explanation justifying whether the memory is sufficient or incomplete. Reference specific information from memory and address each main point.
+- "stop_signal": true if the memory is complete and no more tools are needed; false if additional tool usage is necessary.
 
-If the memory is complete, accurate, AND verified:
-Explanation:
-<Provide a detailed explanation of why the memory is sufficient. Reference specific information from the memory and explain its relevance to each aspect of the task. Address how each main point of the query has been satisfied.>
-
-Conclusion: STOP
-
-If the memory is incomplete, insufficient, or requires further verification:
-Explanation:
-<Explain in detail why the memory is incomplete. Identify specific information gaps or unaddressed aspects of the query. Suggest which additional tools could be used, how they might contribute, and why their input is necessary for a comprehensive response.>
-
-Conclusion: CONTINUE
-
-IMPORTANT: Your response MUST end with either 'Conclusion: STOP' or 'Conclusion: CONTINUE' and nothing else. Ensure your explanation thoroughly justifies this conclusion.
+Do NOT wrap the JSON in markdown code blocks. Output ONLY the raw JSON object.
 """
         else:
             prompt_memory_verification = f"""
@@ -122,11 +112,11 @@ Instructions:
     -   Is any information ambiguous or in need of verification?
 4.  Determine if any unused tools could provide missing information.
 
-Final Determination:
--   If the memory is sufficient, explain why and conclude with "STOP".
--   If more information is needed, explain what's missing, which tools could help, and conclude with "CONTINUE".
+Your response MUST be a valid JSON object with these exact fields:
+- "analysis": Explanation of whether memory is sufficient or what's missing. Include what tools could help if more info is needed.
+- "stop_signal": true if memory is complete and no more tools are needed; false if more tools should be used.
 
-IMPORTANT: The response must end with either "Conclusion: STOP" or "Conclusion: CONTINUE".
+Do NOT wrap the JSON in markdown code blocks. Output ONLY the raw JSON object.
 """
 
         input_data = [prompt_memory_verification]
@@ -156,6 +146,12 @@ IMPORTANT: The response must end with either "Conclusion: STOP" or "Conclusion: 
             # Attempt to parse the response as JSON
             try:
                 response_dict = json.loads(response)
+                # Coerce non-string analysis to string (LLM may output {} instead of "")
+                if "analysis" in response_dict and not isinstance(response_dict["analysis"], str):
+                    response_dict["analysis"] = json.dumps(response_dict["analysis"], ensure_ascii=False) if response_dict["analysis"] else ""
+                # Coerce non-bool stop_signal (LLM may output "true" instead of true)
+                if "stop_signal" in response_dict and not isinstance(response_dict["stop_signal"], bool):
+                    response_dict["stop_signal"] = str(response_dict.get("stop_signal", "")).lower() in ("true", "stop", "yes", "1")
                 response = MemoryVerification(**response_dict)
             except Exception as e:
                 print(f"Failed to parse response as JSON: {str(e)}")

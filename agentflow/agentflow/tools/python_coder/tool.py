@@ -65,7 +65,7 @@ For optimal results with the {TOOL_NAME}:
 
 class Python_Coder_Tool(BaseTool):
     require_llm_engine = True
-    def __init__(self, model_string="gpt-4o"):
+    def __init__(self, model_string="gpt-4o", base_url: str = None):
         super().__init__(
             tool_name=TOOL_NAME,
             tool_description="A tool that generates and executes simple Python code snippets for basic arithmetical calculations and math-related problems. The generated code runs in a highly restricted environment with only basic mathematical operations available.",
@@ -74,10 +74,6 @@ class Python_Coder_Tool(BaseTool):
                 "query": "str - A clear, specific description of the arithmetic calculation or math problem to be solved, including any necessary numerical inputs."},
             output_type="dict - A dictionary containing the generated code, calculation result, and any error messages.",
             demo_commands=[
-                # {
-                #     "command": 'execution = tool.execute(query="Calculate the factorial of 5")',
-                #     "description": "Generate a Python code snippet to calculate the factorial of 5."
-                # },
                 {
                     "command": 'execution = tool.execute(query="Find the sum of prime numbers up to 50")',
                     "description": "Generate a Python code snippet to find the sum of prime numbers up to 50."
@@ -93,15 +89,14 @@ class Python_Coder_Tool(BaseTool):
             }
         )
         print(f"Initializing Python_Coder_Tool with model_string: {model_string}")
-        # self.llm_engine = create_llm_engine(model_string=model_string, is_multimodal=False, base_url=base_url) if model_string else None
 
-        # NOTE: deterministic mode
         self.llm_engine = create_llm_engine(
-            model_string=model_string, 
-            is_multimodal=False, 
-            temperature=0.0, 
-            top_p=1.0, 
-            frequency_penalty=0.0, 
+            model_string=model_string,
+            is_multimodal=False,
+            base_url=base_url,
+            temperature=0.0,
+            top_p=1.0,
+            frequency_penalty=0.0,
             presence_penalty=0.0
             ) if model_string else None
 

@@ -63,11 +63,13 @@ class ChatOpenAI(EngineLM, CachedEngine):
         system_prompt=DEFAULT_SYSTEM_PROMPT,
         is_multimodal: bool=False,
         use_cache: bool=True, # disable cache for now
+        base_url: str = None,
         **kwargs):
         """
         :param model_string:
         :param system_prompt:
         :param is_multimodal:
+        :param base_url: optional custom API base URL for third-party proxies
         """
 
         self.model_string = model_string
@@ -86,13 +88,14 @@ class ChatOpenAI(EngineLM, CachedEngine):
             self.image_cache_dir = os.path.join(root, "image_cache")
             os.makedirs(self.image_cache_dir, exist_ok=True)
             super().__init__(cache_path=cache_path)
-        
+
         if os.getenv("OPENAI_API_KEY") is None:
             raise ValueError("Please set the OPENAI_API_KEY environment variable if you'd like to use OpenAI models.")
-        
-        self.client = OpenAI(
-            api_key=os.getenv("OPENAI_API_KEY"),
-        )
+
+        client_kwargs = {"api_key": os.getenv("OPENAI_API_KEY")}
+        if base_url:
+            client_kwargs["base_url"] = base_url
+        self.client = OpenAI(**client_kwargs)
 
 
     @retry(wait=wait_random_exponential(min=1, max=5), stop=stop_after_attempt(5))
